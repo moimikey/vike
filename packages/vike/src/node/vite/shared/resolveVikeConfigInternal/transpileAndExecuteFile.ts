@@ -18,13 +18,13 @@ import {
 } from 'esbuild'
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import pc from '@brillout/picocolors'
 import { import_ } from '@brillout/import'
 import { assert, assertWarning, assertUsage } from '../../../../utils/assert.js'
 import { assertIsNotProductionRuntime } from '../../../../utils/assertSetup.js'
 import { createDebug } from '../../../../utils/debug.js'
 import { genPromise } from '../../../../utils/genPromise.js'
-import { getRandomId } from '../../../../utils/getRandomId.js'
 import { assertFilePathAbsoluteFilesystem } from '../../../../utils/isFilePathAbsoluteFilesystem.js'
 import { isImportPathRelative } from '../../../../utils/isImportPath.js'
 import { isObject } from '../../../../utils/isObject.js'
@@ -368,7 +368,7 @@ async function executeTranspiledFile(filePath: FilePathResolved, code: string) {
   const { filePathAbsoluteFilesystem } = filePath
   // Alternative to using a temporary file: https://github.com/vitejs/vite/pull/13269
   //  - But seems to break source maps, so I don't think it's worth it
-  const filePathTmp = getTemporaryBuildFilePath(filePathAbsoluteFilesystem)
+  const filePathTmp = getTemporaryBuildFilePath(filePathAbsoluteFilesystem, code)
   fs.writeFileSync(filePathTmp, code)
   const clean = () => fs.unlinkSync(filePathTmp)
   let fileExports: Record<string, unknown> = {}
@@ -383,6 +383,8 @@ async function executeTranspiledFile(filePath: FilePathResolved, code: string) {
 async function executeFile(filePathToExecuteAbsoluteFilesystem: string, filePathSourceFile: FilePathResolved) {
   let fileExports: Record<string, unknown> = {}
   try {
+    // `import(filePath)` is cached: if `filePath` doesn't change => the file isn't re-executed. The import() cache is required for the +meta.vite implementation to work correctly, see hasViteConfigChanged()
+    // https://github.com/vikejs/vike/blob/1c6b7132e667a4359afc28d4601defb1579e8c58/packages/vike/src/node/vite/shared/resolveVikeConfigInternal.ts#L305
     fileExports = await import_(filePathToExecuteAbsoluteFilesystem)
   } catch (err) {
     triggerPrepareStackTrace(err)
@@ -429,12 +431,14 @@ function getConfigExecutionErrorIntroMsg(err: unknown) {
   return errIntroMsg ?? null
 }
 
-function getTemporaryBuildFilePath(filePathAbsoluteFilesystem: string): string {
+function getTemporaryBuildFilePath(filePathAbsoluteFilesystem: string, code: string): string {
   assertPosixPath(filePathAbsoluteFilesystem)
-  const dirname = path.posix.dirname(filePathAbsoluteFilesystem)
+  const fileDir = path.posix.dirname(filePathAbsoluteFilesystem)
   const filename = path.posix.basename(filePathAbsoluteFilesystem)
+  // Using content hash in file path, so that the cache of dynamic `import()` behaves as we want.
+  const fileHash = crypto.createHash('md5').update(code).digest('hex').slice(0, 12)
   // Syntax with semicolon `build:${/*...*/}` doesn't work on Windows: https://github.com/vikejs/vike/issues/800#issuecomment-1517329455
-  const filePathTmp = path.posix.join(dirname, `${filename}.build-${getRandomId()}.mjs`)
+  const filePathTmp = path.posix.join(fileDir, `${filename}.build-${fileHash}.mjs`)
   assert(isTemporaryBuildFile(filePathTmp))
   return filePathTmp
 }

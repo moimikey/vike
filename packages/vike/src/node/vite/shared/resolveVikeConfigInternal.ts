@@ -17,6 +17,7 @@ export { getVikeConfigFromCliOrEnv }
 export type { VikeConfigInternal }
 export type { PageConfigBuildTimeBeforeComputed }
 
+import { deepEqual } from '../../../utils/deepEqual.js'
 import { assertKeys } from '../../../utils/assertKeys.js'
 import { assertIsNotProductionRuntime } from '../../../utils/assertSetup.js'
 import { getMostSimilar } from '../../../utils/getMostSimilar.js'
@@ -288,6 +289,7 @@ async function resolveVikeConfigInternal_withErrorHandling(
   }
 }
 
+// `+meta.vite: true` => restart Vite if config changes
 function hasViteConfigChanged(vikeConfigOld: VikeConfigInternal | null, vikeConfigNew: VikeConfigInternal): boolean {
   if (!vikeConfigOld) return false
 
@@ -300,29 +302,12 @@ function hasViteConfigChanged(vikeConfigOld: VikeConfigInternal | null, vikeConf
   for (const configName of viteConfigNames) {
     const valOld = configValuesOld[configName]?.value
     const valNew = configValuesNew[configName]?.value
-    // TO-DO/eventually: make it work for functions e.g. Vite plugins added via +vite — two solutions to make it work:
-    //  - We cache transpileWithEsbuild() but it's far from trivial
-    //  - We trigger a Vite reload by watching file changes instead of hasViteConfigChanged()
-    //    - Implementation: https://github.com/vikejs/vike/pull/3017/changes/1e55cbc1ed8bac4a72bf8c658cfbd67eecb7802a
-    if (!deepEqualPrimitive(valOld, valNew)) {
-      return true
-    }
+    // Works thanks to the import() cache, see executeFile()
+    // https://github.com/vikejs/vike/blob/1c6b7132e667a4359afc28d4601defb1579e8c58/packages/vike/src/node/vite/shared/resolveVikeConfigInternal/transpileAndExecuteFile.ts#L386
+    if (!deepEqual(valOld, valNew)) return true
   }
 
   return false
-}
-function deepEqualPrimitive(x: any, y: any): boolean {
-  const tx = typeof x
-  const ty = typeof y
-
-  // Skip functions - treat them as always equal
-  if (tx === 'function' && ty === 'function') return true
-
-  // Copy of utils/deepEqual.ts for everything else
-  return x && y && tx === 'object' && tx === ty
-    ? Object.keys(x).length === Object.keys(y).length &&
-        Object.keys(x).every((key) => deepEqualPrimitive(x[key], y[key]))
-    : x === y
 }
 
 async function resolveVikeConfigInternal(
@@ -1568,7 +1553,7 @@ function restartViteDevServer() {
   // - To reproduce: add `bla: 12` to examples/react-full/renderer/+config.ts => `9:22:30 AM [vike][config][Wrong Usage] /renderer/+config.ts sets an unknown config bla`
   ;(async () => {
     try {
-      await viteDevServer.restart(true)
+      await viteDevServer.restart()
     } catch (err) {
       console.error('Vite restart error:')
       console.error(err)
