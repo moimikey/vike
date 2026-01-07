@@ -303,6 +303,7 @@ function hasViteConfigChanged(vikeConfigOld: VikeConfigInternal | null, vikeConf
     const valOld = configValuesOld[configName]?.value
     const valNew = configValuesNew[configName]?.value
     // Works thanks to the import() cache, see executeFile()
+    // https://github.com/vikejs/vike/blob/1c6b7132e667a4359afc28d4601defb1579e8c58/packages/vike/src/node/vite/shared/resolveVikeConfigInternal/transpileAndExecuteFile.ts#L386
     if (!deepEqual(valOld, valNew)) return true
   }
 

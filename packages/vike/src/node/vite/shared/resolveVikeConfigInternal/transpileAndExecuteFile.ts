@@ -384,6 +384,7 @@ async function executeFile(filePathToExecuteAbsoluteFilesystem: string, filePath
   let fileExports: Record<string, unknown> = {}
   try {
     // `import(filePath)` is cached: if `filePath` doesn't change => the file isn't re-executed. The import() cache is required for the +meta.vite implementation to work correctly, see hasViteConfigChanged()
+    // https://github.com/vikejs/vike/blob/1c6b7132e667a4359afc28d4601defb1579e8c58/packages/vike/src/node/vite/shared/resolveVikeConfigInternal.ts#L305
     fileExports = await import_(filePathToExecuteAbsoluteFilesystem)
   } catch (err) {
     triggerPrepareStackTrace(err)
